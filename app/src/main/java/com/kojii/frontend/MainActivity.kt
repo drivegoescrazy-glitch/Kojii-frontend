@@ -247,14 +247,20 @@ class KojiiView(context: Context, private val mode: Mode, private val action: (S
     fun setGames(items: List<Game>, selection: Int, folder: Boolean) { games = items; selected = selection.coerceIn(0, (items.size - 1).coerceAtLeast(0)); hasFolder = folder; invalidate() }
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
-        c.drawColor(Color.rgb(12, 18, 35))
         val w = width.toFloat(); val h = height.toFloat()
+        p.shader = android.graphics.LinearGradient(0f, 0f, w, h,
+            intArrayOf(Color.rgb(8, 14, 29), Color.rgb(17, 29, 53), Color.rgb(10, 19, 38)),
+            null, android.graphics.Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w, h, p)
+        p.shader = null
         p.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-        color(Color.rgb(18, 27, 49)); c.drawRoundRect(18f, 14f, w-18f, 74f, 22f, 22f, p)
-        p.textSize = 24f; color(Color.WHITE); c.drawText("KOJII", 38f, 51f, p)
-        p.typeface = android.graphics.Typeface.create("sans-serif", 0); p.textSize = 13f; color(Color.rgb(157, 178, 210))
+        color(Color.rgb(25, 38, 64)); c.drawRoundRect(18f, 14f, w-18f, 74f, 20f, 20f, p)
+        color(Color.rgb(72, 204, 190)); c.drawRoundRect(30f, 27f, 36f, 61f, 3f, 3f, p)
+        p.textSize = 23f; color(Color.WHITE); c.drawText("KOJII", 47f, 51f, p)
+        p.typeface = android.graphics.Typeface.create("sans-serif", 0); p.textSize = 13f; color(Color.rgb(165, 185, 215))
         c.drawText(if (hasFolder) "${games.size} GAMES  •  SELECT TO PLAY" else "YOUR LIBRARY  •  CHOOSE ROM FOLDER", 132f, 49f, p)
-        p.textSize = 14f; color(Color.rgb(139, 160, 196)); c.drawText("Y  ROM FOLDER", w-160f, 49f, p)
+        color(Color.rgb(37, 55, 83)); c.drawRoundRect(w-172f, 25f, w-30f, 62f, 14f, 14f, p)
+        p.textSize = 12f; color(Color.rgb(139, 228, 218)); c.drawText("Y  ROM FOLDER", w-157f, 48f, p)
         bounds.clear()
         val left = 20f; val gap = 12f; val top = 94f
         cols = if (w < 800) 4 else 6
@@ -265,13 +271,17 @@ class KojiiView(context: Context, private val mode: Mode, private val action: (S
             val row = i / cols; val col = i % cols
             val x = left + col*(cellW+gap); val y = top + row*(cellH+gap)
             val r = RectF(x,y,x+cellW,y+cellH); bounds.add(r)
-            color(if (i == selected) Color.rgb(72, 204, 190) else Color.rgb(29, 43, 70))
-            c.drawRoundRect(r, 15f, 15f, p)
-            color(if (i == selected) Color.rgb(35, 84, 91) else Color.rgb(43, 61, 92))
-            c.drawRoundRect(x+7,y+7,x+cellW-7,y+cellH-39,10f,10f,p)
-            p.textSize = 26f; color(if (i == selected) Color.WHITE else Color.rgb(143, 182, 214))
+            color(if (i == selected) Color.rgb(77, 218, 201) else Color.rgb(36, 52, 80))
+            c.drawRoundRect(r, 17f, 17f, p)
+            color(if (i == selected) Color.rgb(27, 76, 88) else Color.rgb(24, 37, 62))
+            c.drawRoundRect(x+3,y+3,x+cellW-3,y+cellH-3,14f,14f,p)
+            color(if (i == selected) Color.rgb(39, 101, 111) else Color.rgb(37, 55, 84))
+            c.drawRoundRect(x+9,y+9,x+cellW-9,y+cellH-40,11f,11f,p)
+            color(if (i == selected) Color.rgb(72, 204, 190) else Color.rgb(58, 81, 116))
+            c.drawCircle(x+cellW/2, y+(cellH-31f)/2, minOf(cellW, cellH)*0.20f, p)
+            p.textSize = 26f; color(if (i == selected) Color.WHITE else Color.rgb(190, 211, 239))
             val label = games[i].title.take(1).uppercase(Locale.ROOT)
-            c.drawText(label, x+cellW/2-p.measureText(label)/2, y+cellH/2-5, p)
+            c.drawText(label, x+cellW/2-p.measureText(label)/2, y+(cellH-31f)/2+9f, p)
             p.textSize = 12f; color(Color.WHITE)
             drawWrapped(c, games[i].title, x+12, y+cellH-20, cellW-24, p)
         }
@@ -285,8 +295,9 @@ class KojiiView(context: Context, private val mode: Mode, private val action: (S
             color(Color.rgb(72, 204, 190)); c.drawRoundRect(48f,h*0.46f+55f,260f,h*0.46f+101f,14f,14f,p)
             p.textSize = 15f; color(Color.rgb(9, 25, 39)); c.drawText("CHOOSE ROM FOLDER",62f,h*0.46f+83f,p)
         }
-        p.textSize = 12f; color(Color.rgb(117, 139, 175))
-        c.drawText("▲ ▼ ◀ ▶ NAVIGATE     A OPEN     Y CHANGE FOLDER", 28f, h-10f, p)
+        color(Color.rgb(20, 31, 52)); c.drawRoundRect(18f, h-34f, w-18f, h-4f, 12f, 12f, p)
+        p.textSize = 11f; color(Color.rgb(151, 174, 207))
+        c.drawText("▲ ▼ ◀ ▶  NAVIGATE     A / ENTER  OPEN     Y  CHANGE FOLDER", 30f, h-14f, p)
     }
     private fun drawWrapped(c: Canvas, text: String, x: Float, y: Float, max: Float, paint: Paint) {
         var line = ""; val words = text.split(" "); var yy = y
