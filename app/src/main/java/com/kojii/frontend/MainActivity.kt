@@ -29,7 +29,8 @@ class MainActivity : Activity() {
     private var games: List<Game> = emptyList()
     private var selected = 0
     private var scanRoot: Uri? = null
-    private lateinit var gridView: KojiiView
+    private lateinit var heroView: HeroView
+    private var libraryView: KojiiView? = null
     private val preferences by lazy { getSharedPreferences("kojii_library", Context.MODE_PRIVATE) }
     private fun pickFolder() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
@@ -60,16 +61,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-        gridView = KojiiView(this, KojiiView.Mode.GRID) { action ->
-            when (action) {
-                "folder" -> pickFolder()
-                "prev" -> moveSelection(-1)
-                "next" -> moveSelection(1)
-                "launch" -> launchSelected()
-                else -> if (action.startsWith("select:")) { selected = action.substringAfter(":").toIntOrNull() ?: 0; refreshViews() }
-            }
-        }
-        setContentView(gridView)
+        heroView = HeroView(this) { pickFolder() }
+        setContentView(heroView)
         displayManager.registerDisplayListener(displayListener, null)
         refreshSecondaryDisplay()
 
@@ -103,7 +96,18 @@ class MainActivity : Activity() {
             secondDisplayId = null
             if (display != null) {
                 try {
-                    secondScreen = HeroPresentation(this, display).also { it.show() }
+                    secondScreen = LibraryPresentation(this, display) { action ->
+                        when (action) {
+                            "folder" -> pickFolder()
+                            "prev" -> moveSelection(-1)
+                            "next" -> moveSelection(1)
+                            "launch" -> launchSelected()
+                            else -> if (action.startsWith("select:")) {
+                                selected = action.substringAfter(":").toIntOrNull() ?: 0
+                                refreshViews()
+                            }
+                        }
+                    }.also { it.show() }
                     secondDisplayId = display.displayId
                 } catch (_: Exception) {
                     secondScreen = null
@@ -193,9 +197,9 @@ class MainActivity : Activity() {
     }
 
     private fun refreshViews() {
-        if (!::gridView.isInitialized) return
-        gridView.setGames(games, selected, scanRoot != null)
-        secondScreen?.updateGame(games.getOrNull(selected), selected + 1, games.size)
+        if (!::heroView.isInitialized) return
+        heroView.setGame(games.getOrNull(selected), selected + 1, games.size, scanRoot != null)
+        secondScreen?.setGames(games, selected, scanRoot != null)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -223,16 +227,16 @@ class MainActivity : Activity() {
     }
 }
 
-class HeroPresentation(context: Context, display: Display) : Presentation(context, display) {
-    private var hero: HeroView? = null
+class LibraryPresentation(context: Context, display: Display, private val action: (String) -> Unit) : Presentation(context, display) {
+    private var library: KojiiView? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val view = HeroView(context)
-        hero = view
-        setContentView(view)
-        window?.setBackgroundDrawableResource(android.R.color.transparent)
+        library = KojiiView(context, KojiiView.Mode.GRID, action)
+        setContentView(library)
     }
-    fun updateGame(game: Game?, number: Int, total: Int) { hero?.setGame(game, number, total) }
+    fun setGames(games: List<Game>, selected: Int, hasFolder: Boolean) {
+        library?.setGames(games, selected, hasFolder)
+    }
 }
 
 class KojiiView(context: Context, private val mode: Mode, private val action: (String) -> Unit) : View(context) {
@@ -320,23 +324,47 @@ class KojiiView(context: Context, private val mode: Mode, private val action: (S
     override fun performClick(): Boolean { super.performClick(); return true }
 }
 
-class HeroView(context: Context) : View(context) {
+class HeroView(context: Context, private val chooseFolder: () -> Unit) : View(context) {
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_UP && game == null) chooseFolder()
+        return true
+    }
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private var game: Game? = null; private var number = 0; private var total = 0
-    fun setGame(g: Game?, n: Int, t: Int) { game = g; number = n; total = t; invalidate() }
+    private var hasFolder = false
+    fun setGame(g: Game?, n: Int, t: Int, folder: Boolean) { game = g; number = n; total = t; hasFolder = folder; invalidate() }
     override fun onDraw(c: Canvas) {
         super.onDraw(c); val w=width.toFloat(); val h=height.toFloat()
-        c.drawColor(Color.rgb(10,15,29))
-        p.shader = android.graphics.LinearGradient(0f,0f,w,h, intArrayOf(Color.rgb(22,48,70),Color.rgb(35,48,80),Color.rgb(10,15,29)),null,android.graphics.Shader.TileMode.CLAMP)
+        c.drawColor(Color.rgb(32,32,32))
+        p.shader = android.graphics.LinearGradient(0f,0f,w,h, intArrayOf(Color.rgb(49,49,49),Color.rgb(31,31,31),Color.rgb(18,18,18)),null,android.graphics.Shader.TileMode.CLAMP)
         c.drawRect(0f,0f,w,h,p); p.shader=null
-        p.color=Color.rgb(72,204,190); c.drawRoundRect(30f,30f,44f,90f,7f,7f,p)
-        p.color=Color.WHITE; p.typeface=android.graphics.Typeface.create("sans-serif-medium",0); p.textSize=22f; c.drawText("KOJII",64f,65f,p)
-        p.typeface=android.graphics.Typeface.create("sans-serif",0); p.textSize=13f; p.color=Color.rgb(155,181,211); c.drawText("GAME LIBRARY",64f,87f,p)
+        val barH = (h * 0.09f).coerceAtLeast(30f)
+        p.color=Color.rgb(18,18,18); c.drawRect(0f,0f,w,barH,p)
+        p.color=Color.rgb(85,190,235); c.drawRoundRect(10f,barH*0.28f,w*0.33f,barH*0.76f,8f,8f,p)
+        p.color=Color.WHITE; p.textSize=barH*0.48f; p.typeface=android.graphics.Typeface.create("sans-serif-medium",0)
+        c.drawText("Internet",w*0.08f,barH*0.66f,p)
         val g=game
-        p.textSize=if(w<700) 32f else 46f; p.typeface=android.graphics.Typeface.create("sans-serif-medium",0); p.color=Color.WHITE
-        c.drawText((g?.title ?: "Ready when you are").take(32),40f,h*0.48f,p)
-        p.textSize=18f; p.typeface=android.graphics.Typeface.create("sans-serif",0); p.color=Color.rgb(72,204,190)
-        c.drawText(g?.system ?: "Select a game on the lower screen",42f,h*0.48f+36f,p)
-        p.textSize=14f; p.color=Color.rgb(154,174,204); c.drawText(if(g!=null) "GAME $number OF $total" else "CHOOSE A ROM FOLDER TO BEGIN",42f,h-40f,p)
+        val iconSize=minOf(w*0.24f,h*0.27f)
+        val iconLeft=(w-iconSize)/2f; val iconTop=barH+ h*0.035f
+        p.color=Color.rgb(90,90,90); c.drawRoundRect(iconLeft-5,iconTop-5,iconLeft+iconSize+5,iconTop+iconSize+5,18f,18f,p)
+        p.color=Color.rgb(225,225,225); c.drawRoundRect(iconLeft,iconTop,iconLeft+iconSize,iconTop+iconSize,14f,14f,p)
+        p.color=Color.rgb(40,40,40); p.textSize=iconSize*0.58f; p.typeface=android.graphics.Typeface.create("sans-serif",0)
+        val mark=if(g!=null) g.title.take(1).uppercase(Locale.ROOT) else "?"
+        c.drawText(mark,iconLeft+iconSize/2-p.measureText(mark)/2,iconTop+iconSize*0.68f,p)
+        val titleTop=iconTop+iconSize+h*0.025f
+        p.color=Color.rgb(224,224,224); c.drawRoundRect(w*0.18f,titleTop,w*0.82f,titleTop+h*0.17f,16f,16f,p)
+        p.color=Color.rgb(40,40,40); p.textSize=(w*0.035f).coerceIn(12f,20f); p.typeface=android.graphics.Typeface.create("sans-serif",0)
+        val title=(g?.title ?: if(hasFolder) "No games found" else "Choose ROM folder").take(34)
+        c.drawText(title,w/2-p.measureText(title)/2,titleTop+h*0.075f,p)
+        p.textSize=(w*0.027f).coerceIn(10f,15f)
+        val system=g?.system ?: if(hasFolder) "Choose another folder" else "Kojii game library"
+        c.drawText(system,w/2-p.measureText(system)/2,titleTop+h*0.125f,p)
+        p.color=Color.rgb(16,16,16); c.drawRect(0f,h*0.84f,w,h,p)
+        p.color=Color.WHITE; p.textSize=(w*0.04f).coerceIn(14f,22f)
+        val footer=if(g!=null) "Open  •  $number / $total" else "Choose ROM Folder"
+        c.drawText(footer,w/2-p.measureText(footer)/2,h*0.93f,p)
+        if(g==null) {
+            p.color=Color.argb(1,0,0,0)
+        }
     }
 }
