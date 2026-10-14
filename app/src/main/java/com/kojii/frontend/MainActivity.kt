@@ -17,7 +17,6 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import android.content.Context
-import androidx.activity.result.contract.ActivityResultContracts
 import java.util.Locale
 import kotlin.concurrent.thread
 
@@ -30,13 +29,27 @@ class MainActivity : Activity() {
     private var selected = 0
     private var scanRoot: Uri? = null
     private lateinit var gridView: KojiiView
-    private val pickFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) {
+    private fun pickFolder() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            scanRoot?.let { putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, it) }
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, REQUEST_PICK_FOLDER)
+    }
+
+    @Deprecated("Uses the platform document picker for compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_PICK_FOLDER && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
             try {
                 contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 scanRoot = uri
                 scanGames(uri)
-            } catch (_: Exception) { Toast.makeText(this, "Could not read that folder", Toast.LENGTH_SHORT).show() }
+            } catch (_: Exception) {
+                Toast.makeText(this, "Could not read that folder", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -46,7 +59,7 @@ class MainActivity : Activity() {
         displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         gridView = KojiiView(this, KojiiView.Mode.GRID) { action ->
             when (action) {
-                "folder" -> pickFolder.launch(scanRoot)
+                "folder" -> pickFolder()
                 "prev" -> moveSelection(-1)
                 "next" -> moveSelection(1)
                 "launch" -> launchSelected()
@@ -140,7 +153,7 @@ class MainActivity : Activity() {
     }
 
     private fun launchSelected() {
-        val game = games.getOrNull(selected) ?: run { pickFolder.launch(scanRoot); return }
+        val game = games.getOrNull(selected) ?: run { pickFolder(); return }
         try {
             val intent = Intent(Intent.ACTION_VIEW).setDataAndType(game.uri, contentResolver.getType(game.uri) ?: "*/*")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -161,7 +174,7 @@ class MainActivity : Activity() {
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_UP -> { moveSelection(-1); return true }
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_DOWN -> { moveSelection(1); return true }
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_DPAD_CENTER -> { launchSelected(); return true }
-            KeyEvent.KEYCODE_BUTTON_Y -> { pickFolder.launch(scanRoot); return true }
+            KeyEvent.KEYCODE_BUTTON_Y -> { pickFolder(); return true }
         }
         return super.onKeyDown(keyCode, event)
     }
@@ -173,6 +186,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        private const val REQUEST_PICK_FOLDER = 701
         val ROM_EXTENSIONS = setOf("3ds","cci","cia","3dsx","nds","srl","gba","agb","gbc","cgb","gb","n64","z64","v64","iso","cso","nes","fds","sfc","smc","gcm","gcz","rvz","wbfs","wud","wux","pce","cue","chd","md","gen","sms","gg","zip","7z")
     }
 }
@@ -181,8 +195,9 @@ class HeroPresentation(context: Context, display: Display) : Presentation(contex
     private var hero: HeroView? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        hero = HeroView(context)
-        setContentView(hero)
+        val view = HeroView(context)
+        hero = view
+        setContentView(view)
         window?.setBackgroundDrawableResource(android.R.color.transparent)
     }
     fun updateGame(game: Game?, number: Int, total: Int) { hero?.setGame(game, number, total) }
