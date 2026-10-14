@@ -24,7 +24,7 @@ data class Game(val title: String, val uri: Uri, val system: String)
 
 class MainActivity : Activity() {
     private lateinit var displayManager: DisplayManager
-    private var secondScreen: HeroPresentation? = null
+    private var secondScreen: LibraryPresentation? = null
     private var secondDisplayId: Int? = null
     private var games: List<Game> = emptyList()
     private var selected = 0
@@ -82,7 +82,7 @@ class MainActivity : Activity() {
 
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) = refreshSecondaryDisplay()
-        override fun onDisplayRemoved(displayId: Int) { secondScreen?.dismiss(); secondScreen = null }
+        override fun onDisplayRemoved(displayId: Int) { secondScreen?.dismiss(); secondScreen = null; secondDisplayId = null }
         override fun onDisplayChanged(displayId: Int) = refreshSecondaryDisplay()
     }
 
@@ -231,8 +231,9 @@ class LibraryPresentation(context: Context, display: Display, private val action
     private var library: KojiiView? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        library = KojiiView(context, KojiiView.Mode.GRID, action)
-        setContentView(library)
+        val view = KojiiView(context, KojiiView.Mode.GRID, action)
+        library = view
+        setContentView(view)
     }
     fun setGames(games: List<Game>, selected: Int, hasFolder: Boolean) {
         library?.setGames(games, selected, hasFolder)
