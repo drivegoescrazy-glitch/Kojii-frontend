@@ -25,10 +25,12 @@ data class Game(val title: String, val uri: Uri, val system: String)
 class MainActivity : Activity() {
     private lateinit var displayManager: DisplayManager
     private var secondScreen: HeroPresentation? = null
+    private var secondDisplayId: Int? = null
     private var games: List<Game> = emptyList()
     private var selected = 0
     private var scanRoot: Uri? = null
     private lateinit var gridView: KojiiView
+    private val preferences by lazy { getSharedPreferences("kojii_library", Context.MODE_PRIVATE) }
     private fun pickFolder() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
@@ -46,6 +48,7 @@ class MainActivity : Activity() {
             try {
                 contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 scanRoot = uri
+                preferences.edit().putString(KEY_ROM_TREE_URI, uri.toString()).apply()
                 scanGames(uri)
             } catch (_: Exception) {
                 Toast.makeText(this, "Could not read that folder", Toast.LENGTH_SHORT).show()
@@ -67,8 +70,21 @@ class MainActivity : Activity() {
             }
         }
         setContentView(gridView)
-        refreshSecondaryDisplay()
         displayManager.registerDisplayListener(displayListener, null)
+        refreshSecondaryDisplay()
+
+        // Restore the persisted Storage Access Framework grant instead of prompting
+        // for the ROM directory every time the app starts.
+        val savedTree = preferences.getString(KEY_ROM_TREE_URI, null)?.let(Uri::parse)
+        if (savedTree != null && contentResolver.persistedUriPermissions.any {
+                it.uri == savedTree && it.isReadPermission
+            }) {
+            scanRoot = savedTree
+            scanGames(savedTree)
+        } else {
+            scanRoot = null
+            refreshViews()
+        }
     }
 
     private val displayListener = object : DisplayManager.DisplayListener {
@@ -78,10 +94,23 @@ class MainActivity : Activity() {
     }
 
     private fun refreshSecondaryDisplay() {
-        val display = displayManager.displays.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY && it.state == Display.STATE_ON }
-        if (display != null && secondScreen == null) {
-            try { secondScreen = HeroPresentation(this, display).also { it.show() } } catch (_: Exception) { secondScreen = null }
-        } else if (display == null) { secondScreen?.dismiss(); secondScreen = null }
+        val display = displayManager.displays.firstOrNull {
+            it.displayId != Display.DEFAULT_DISPLAY && it.state == Display.STATE_ON
+        }
+        if (display?.displayId != secondDisplayId) {
+            secondScreen?.dismiss()
+            secondScreen = null
+            secondDisplayId = null
+            if (display != null) {
+                try {
+                    secondScreen = HeroPresentation(this, display).also { it.show() }
+                    secondDisplayId = display.displayId
+                } catch (_: Exception) {
+                    secondScreen = null
+                    secondDisplayId = null
+                }
+            }
+        }
         refreshViews()
     }
 
@@ -127,7 +156,7 @@ class MainActivity : Activity() {
                 games = found
                 selected = 0
                 refreshViews()
-                Toast.makeText(this, "Found ${found.size} games", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, if (found.isEmpty()) "No supported ROM files found in that folder" else "Found ${found.size} games", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -182,11 +211,14 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         displayManager.unregisterDisplayListener(displayListener)
         secondScreen?.dismiss()
+        secondScreen = null
+        secondDisplayId = null
         super.onDestroy()
     }
 
     companion object {
         private const val REQUEST_PICK_FOLDER = 701
+        private const val KEY_ROM_TREE_URI = "rom_tree_uri"
         val ROM_EXTENSIONS = setOf("3ds","cci","cia","3dsx","nds","srl","gba","agb","gbc","cgb","gb","n64","z64","v64","iso","cso","nes","fds","sfc","smc","gcm","gcz","rvz","wbfs","wud","wux","pce","cue","chd","md","gen","sms","gg","zip","7z")
     }
 }
